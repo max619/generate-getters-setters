@@ -111,7 +111,23 @@ function toCamelCase(str: string) {
     return str.replace(/\w+/g, w => w[0].toUpperCase() + w.slice(1));
 }
 
-function createGetterAndSetter(textProperties: string) {
+type FieldInfo = {
+    name: string;
+    type?: string;
+};
+
+function tryExtractFieldInfo(line: string): FieldInfo | null {
+    const regex = new RegExp('private\\s*_?(\\S+)\\s*(:\\s*(\\S+))?(\\s+=\\s+(.+))?;');
+
+    const regexResult = regex.exec(line);
+    if (!regexResult || regexResult.length === 0) {
+        return null;
+    }
+
+    return { name: regexResult[1], type: regexResult[3] && regexResult[3] };
+}
+
+function createGetterAndSetterInternal(textProperties: string, codeGenerator: (info: FieldInfo) => string) {
     let rows = textProperties.split('\n').map(x => x.replace(';', ''));
     let properties: Array<string> = [];
 
@@ -121,147 +137,41 @@ function createGetterAndSetter(textProperties: string) {
         }
     }
 
-    let generatedCode = `
-`;
-    for (let p in properties) {
-        while (properties[p].startsWith(" ")) { properties[p] = properties[p].substr(1); }
-        while (properties[p].startsWith("\t")) { properties[p] = properties[p].substr(1); }
-        let words: Array<string> = [];
+    let generatedCode = `\r`;
+    for (const p of properties) {
 
-        let rows = properties[p].split(" ").map(x => x.replace('\r\n', ''));
-        for (let row of rows) {
-            if (row.trim() !== '') {
-                words.push(row.replace('\r',''));
-            }
-        }
-        let type, attribute, Attribute = "";
-        let create = false;
+        const fieldInfo = tryExtractFieldInfo(p);
 
-        // if words === ["private", "name:", "string"];
-        if (words.length === 3) {
-            let attributeArray = words[1].split(":");
-            type = words[2];
-            attribute = attributeArray[0];
-            Attribute = toCamelCase(attribute);
-
-            create = true;
-            // if words === ["private", "name:string"];
-        } else if (words.length === 2) {
-            let array = words[1].split(":");
-            type = array[1];
-            attribute = array[0];
-            Attribute = toCamelCase(attribute);
-            create = true;
-            // if words === ["private", "name", ":", "string"];
-        } else if (words.length === 4) {
-
-            let array: Array<string> = [];
-            for (let word of words) {
-                if (word !== ':') {
-                    array.push(word);
-                }
-            }
-            type = array[2].trim();
-            attribute = array[1];
-            Attribute = toCamelCase(attribute);
-            create = true;
-        } else {
-            vscode.window.showErrorMessage('Something went wrong! Try that the properties are in this format: "private name: string;"');
-            generatedCode = ``;
-            break;
-        }
-
-        if (create) {
-
-            let code = `
-    public ${(type === "Boolean" || type === "boolean" ? "is" : "get")}${Attribute}(): ${type} {
-        return this.${attribute};
-    }
-
-    public set${Attribute}(${attribute}: ${type}): void {
-        this.${attribute} = ${attribute};
-    }
-`;
-            generatedCode += code;
+        if (fieldInfo) {
+            generatedCode += codeGenerator(fieldInfo) + '\r';
         }
     }
 
     return generatedCode;
 }
 
-function createGetterAndSetterES6(textProperties: string) {
-    let rows = textProperties.split('\n').map(x => x.replace(';', ''));
-    let properties: Array<string> = [];
+function createGetterAndSetter(textProperties: string) {
+    return createGetterAndSetterInternal(textProperties, (fi) => {
+        return `\r
+            public ${(fi.type === "Boolean" || fi.type === "boolean" ? "is" : "get")}${toCamelCase(fi.name)}()${fi.type ? `: ${fi.type}` : ''} {
+                return this.${fi.name};
+            }\r\r
+            public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}): void {
+                this.${fi.name} = ${fi.name};
+            }\r`;
+    });
+}
 
-    for (let row of rows) {
-        if (row.trim() !== "") {
-            properties.push(row);
-        }
-    }
-
-    let generatedCode = `
-`;
-    for (let p in properties) {
-        while (properties[p].startsWith(" ")) { properties[p] = properties[p].substr(1); }
-        while (properties[p].startsWith("\t")) { properties[p] = properties[p].substr(1); }
-        let words: Array<string> = [];
-
-        let rows = properties[p].split(" ").map(x => x.replace('\r\n', ''));
-        for (let row of rows) {
-            if (row.trim() !== '') {
-                words.push(row);
-            }
-        }
-        let type, attribute = "";
-        let create = false;
-
-        // if words === ["private", "name:", "string"];
-        if (words.length === 3) {
-            let attributeArray = words[1].split(":");
-            type = words[2];
-            attribute = attributeArray[0];
-
-            create = true;
-            // if words === ["private", "name:string"];
-        } else if (words.length === 2) {
-            let array = words[1].split(":");
-            type = array[1];
-            attribute = array[0];
-            create = true;
-            // if words === ["private", "name", ":", "string"];
-        } else if (words.length === 4) {
-
-            let array: Array<string> = [];
-            for (let word of words) {
-                if (word !== ':') {
-                    array.push(word);
-                }
-            }
-            type = array[2].trim();
-            attribute = array[1];
-            create = true;
-        } else {
-            vscode.window.showErrorMessage('Something went wrong! Try that the properties are in this format: "private name: string;"');
-            generatedCode = ``;
-            break;
-        }
-
-        if (create) {
-
-            let code = `
-    public get ${attribute.replace('_', '')}(): ${type} {
-        return this.${attribute};
-    }
-
-    public set ${attribute.replace('_', '')}(${attribute.replace('_', '')}: ${type}) {
-        this.${attribute} = ${attribute.replace('_', '')};
-    }
-`;
-            generatedCode += code;
-        }
-    }
-
-    return generatedCode;
+function createGetterAndSetterES6(textProperties: string) {    
+    return createGetterAndSetterInternal(textProperties, (fi) => {
+        return `\r
+            public get ${fi.name}()${fi.type ? `: ${fi.type}` : ''} {
+                return this.${fi.name};
+            }\r\r
+            public set ${fi.name}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}) {
+                this.${fi.name} = ${fi.name};
+            }\r`;
+    });
 }
 
 // this method is called when your extension is deactivated
