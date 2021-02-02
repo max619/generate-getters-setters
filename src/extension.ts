@@ -112,38 +112,32 @@ function toCamelCase(str: string) {
 }
 
 type FieldInfo = {
+    fieldName: string;
     name: string;
     type?: string;
 };
 
 function tryExtractFieldInfo(line: string): FieldInfo | null {
-    const regex = new RegExp('private\\s*_?(\\S+)\\s*(:\\s*(\\S+))?(\\s+=\\s+(.+))?;');
+    const regex = /private\s*(_?(\S+))\s*(:\s*(\S+))?(\s+=\s+(.+))?;/;
 
     const regexResult = regex.exec(line);
     if (!regexResult || regexResult.length === 0) {
         return null;
     }
 
-    return { name: regexResult[1], type: regexResult[3] && regexResult[3] };
+    return { fieldName: regexResult[1], name: regexResult[2], type: regexResult[4] && regexResult[4] };
 }
 
 function createGetterAndSetterInternal(textProperties: string, codeGenerator: (info: FieldInfo) => string) {
-    let rows = textProperties.split('\n').map(x => x.replace(';', ''));
-    let properties: Array<string> = [];
+    const rows = textProperties.split('\n').filter((line) => line.trim() !== '').map((line) => line.trim());
 
-    for (let row of rows) {
-        if (row.trim() !== "") {
-            properties.push(row);
-        }
-    }
-
-    let generatedCode = `\r`;
-    for (const p of properties) {
+    let generatedCode = `\n`;
+    for (const p of rows) {
 
         const fieldInfo = tryExtractFieldInfo(p);
 
         if (fieldInfo) {
-            generatedCode += codeGenerator(fieldInfo) + '\r';
+            generatedCode += codeGenerator(fieldInfo) + '\n';
         }
     }
 
@@ -152,25 +146,25 @@ function createGetterAndSetterInternal(textProperties: string, codeGenerator: (i
 
 function createGetterAndSetter(textProperties: string) {
     return createGetterAndSetterInternal(textProperties, (fi) => {
-        return `\r
+        return `
             public ${(fi.type === "Boolean" || fi.type === "boolean" ? "is" : "get")}${toCamelCase(fi.name)}()${fi.type ? `: ${fi.type}` : ''} {
-                return this.${fi.name};
-            }\r\r
+                return this.${fi.fieldName};
+            }\n
             public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}): void {
-                this.${fi.name} = ${fi.name};
-            }\r`;
+                this.${fi.fieldName} = value;
+            }`;
     });
 }
 
-function createGetterAndSetterES6(textProperties: string) {    
+function createGetterAndSetterES6(textProperties: string) {
     return createGetterAndSetterInternal(textProperties, (fi) => {
-        return `\r
+        return `
             public get ${fi.name}()${fi.type ? `: ${fi.type}` : ''} {
-                return this.${fi.name};
-            }\r\r
+                return this.${fi.fieldName};
+            }\n
             public set ${fi.name}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}) {
-                this.${fi.name} = ${fi.name};
-            }\r`;
+                this.${fi.fieldName} = value;
+            }`;
     });
 }
 
