@@ -118,7 +118,7 @@ type FieldInfo = {
 };
 
 function tryExtractFieldInfo(line: string): FieldInfo | null {
-    const regex = /private\s*(_?(\S+))\s*(:\s*(\S+))?(\s+=\s+(.+))?;/;
+    const regex = /private\s*(_?(\S*\b))\??\s*(:\s*(\S+))?(\s+=\s+(.+))?;/;
 
     const regexResult = regex.exec(line);
     if (!regexResult || regexResult.length === 0) {
@@ -150,7 +150,7 @@ function createGetterAndSetter(textProperties: string) {
             public ${(fi.type === "Boolean" || fi.type === "boolean" ? "is" : "get")}${toCamelCase(fi.name)}()${fi.type ? `: ${fi.type}` : ''} {
                 return this.${fi.fieldName};
             }\n
-            public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}): void {
+            public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}): void {
                 this.${fi.fieldName} = value;
             }`;
     });
@@ -162,7 +162,7 @@ function createGetterAndSetterES6(textProperties: string) {
             public get ${fi.name}()${fi.type ? `: ${fi.type}` : ''} {
                 return this.${fi.fieldName};
             }\n
-            public set ${fi.name}(value${fi.type ? `: ${fi.type}` : '/* Unknown type (Fix me)*/'}) {
+            public set ${fi.name}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}) {
                 this.${fi.fieldName} = value;
             }`;
     });
