@@ -115,17 +115,23 @@ type FieldInfo = {
     fieldName: string;
     name: string;
     type?: string;
+    canBeUndefined: boolean;
 };
 
 function tryExtractFieldInfo(line: string): FieldInfo | null {
-    const regex = /private\s*(_?(\S*\b))\??\s*(:\s*(\S+))?(\s+=\s+(.+))?;/;
+    const regex = /private\s*(_?(\S*\b))(\?)?\s*(:\s*(\S+))?(\s+=\s+(.+))?;/;
 
     const regexResult = regex.exec(line);
     if (!regexResult || regexResult.length === 0) {
         return null;
     }
 
-    return { fieldName: regexResult[1], name: regexResult[2], type: regexResult[4] && regexResult[4] };
+    return {
+        fieldName: regexResult[1],
+        name: regexResult[2],
+        type: regexResult[5] && regexResult[5],
+        canBeUndefined: regexResult[3] === '?' ? true : false
+    };
 }
 
 function createGetterAndSetterInternal(textProperties: string, codeGenerator: (info: FieldInfo) => string) {
@@ -147,10 +153,10 @@ function createGetterAndSetterInternal(textProperties: string, codeGenerator: (i
 function createGetterAndSetter(textProperties: string) {
     return createGetterAndSetterInternal(textProperties, (fi) => {
         return `
-            public ${(fi.type === "Boolean" || fi.type === "boolean" ? "is" : "get")}${toCamelCase(fi.name)}()${fi.type ? `: ${fi.type}` : ''} {
+            public ${(fi.type === "Boolean" || fi.type === "boolean" ? "is" : "get")}${toCamelCase(fi.name)}()${fi.type ? `: ${fi.type}` : ''}${fi.canBeUndefined ? ' | undefined' : ''} {
                 return this.${fi.fieldName};
             }\n
-            public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}): void {
+            public set${toCamelCase(fi.name)}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}${fi.canBeUndefined ? ' | undefined' : ''}): void {
                 this.${fi.fieldName} = value;
             }`;
     });
@@ -159,10 +165,10 @@ function createGetterAndSetter(textProperties: string) {
 function createGetterAndSetterES6(textProperties: string) {
     return createGetterAndSetterInternal(textProperties, (fi) => {
         return `
-            public get ${fi.name}()${fi.type ? `: ${fi.type}` : ''} {
+            public get ${fi.name}()${fi.type ? `: ${fi.type}` : ''}${fi.canBeUndefined ? ' | undefined' : ''} {
                 return this.${fi.fieldName};
             }\n
-            public set ${fi.name}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}) {
+            public set ${fi.name}(value${fi.type ? `: ${fi.type}` : ' /* Unknown type (Fix me)*/'}${fi.canBeUndefined ? ' | undefined' : ''}) {
                 this.${fi.fieldName} = value;
             }`;
     });
